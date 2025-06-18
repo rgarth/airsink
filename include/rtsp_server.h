@@ -15,6 +15,14 @@ typedef struct {
     char output_dir[256]; // New: output directory for audio files
 } rtsp_server_config_t;
 
+// RTSP connection state
+struct rtsp_connection {
+    struct bufferevent *bev;
+    SSL *ssl;
+    char *session_id;
+    int cseq;
+};
+
 // RTSP session state
 typedef struct {
     char *session_id;

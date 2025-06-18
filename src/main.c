@@ -7,7 +7,8 @@
 #include <unistd.h>
 #include <stdbool.h>
 
-static rtsp_server_t *server = NULL;
+static volatile bool running = true;
+static volatile bool force_exit = false;
 static bool verbose_mode = false;
 
 // Debug logging function
@@ -22,75 +23,98 @@ void debug_log(const char *format, ...) {
     va_end(args);
 }
 
-static void signal_handler(int sig) {
-    (void)sig;  // Unused parameter
-    debug_log("Received signal %d, shutting down...", sig);
-    
-    if (server) {
-        rtsp_server_stop(server);
-        rtsp_server_cleanup(server);
-        server = NULL;
+void signal_handler(int signum) {
+    if (signum == SIGINT) {
+        if (force_exit) {
+            debug_log("Force exit requested, terminating immediately");
+            exit(1);
+        }
+        debug_log("Received signal %d, shutting down...", signum);
+        running = false;
+        force_exit = true;
     }
-    mdns_avahi_stop();
-    exit(0);
+}
+
+void print_usage(const char *prog_name) {
+    printf("Usage: %s [-v] [-p port] [-d directory]\n", prog_name);
+    printf("Options:\n");
+    printf("  -v         Enable verbose logging\n");
+    printf("  -p port    Specify port number (default: 7000)\n");
+    printf("  -d dir     Specify output directory (default: current directory)\n");
+    printf("  -h         Show this help message\n");
 }
 
 int main(int argc, char *argv[]) {
-    // Set up signal handlers
-    signal(SIGINT, signal_handler);
-    signal(SIGTERM, signal_handler);
+    int port = 7000;
+    const char *output_dir = ".";
+    bool verbose = false;
+    int opt;
 
-    // Configure RTSP server
-    rtsp_server_config_t config = {
-        .port = 7000,  // Default AirPlay port
-        .cert_path = NULL,  // TODO: Add certificate paths
-        .key_path = NULL,
-        .output_dir = "." // Default to current directory
-    };
-
-    // Parse command-line arguments
-    for (int i = 1; i < argc; ++i) {
-        if (strcmp(argv[i], "-v") == 0) {
-            verbose_mode = true;
-            debug_log("Verbose mode enabled");
-        } else if (strncmp(argv[i], "--output-dir=", 13) == 0) {
-            strncpy(config.output_dir, argv[i] + 13, sizeof(config.output_dir) - 1);
-            config.output_dir[sizeof(config.output_dir) - 1] = '\0';
-            debug_log("Output directory set to: %s", config.output_dir);
+    // Parse command line arguments
+    while ((opt = getopt(argc, argv, "p:o:vh")) != -1) {
+        switch (opt) {
+            case 'p':
+                port = atoi(optarg);
+                break;
+            case 'o':
+                output_dir = optarg;
+                break;
+            case 'v':
+                verbose = true;
+                verbose_mode = true;
+                break;
+            case 'h':
+                printf("Usage: %s [-p port] [-o output_dir] [-v]\n", argv[0]);
+                return 0;
+            default:
+                fprintf(stderr, "Usage: %s [-p port] [-o output_dir] [-v]\n", argv[0]);
+                return 1;
         }
     }
 
-    // Strip trailing slash from output_dir (unless it's just "." or "/")
-    size_t len = strlen(config.output_dir);
-    while (len > 1 && config.output_dir[len - 1] == '/' && strcmp(config.output_dir, "/") != 0 && strcmp(config.output_dir, ".") != 0) {
-        config.output_dir[len - 1] = '\0';
-        len--;
-    }
+    // Set up signal handlers
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = signal_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
 
-    debug_log("Starting mDNS advertisement for AIRSINK on port %d", config.port);
-    // Start mDNS advertisement
-    if (mdns_avahi_start("AIRSINK", config.port) != 0) {
-        fprintf(stderr, "Failed to start mDNS advertisement\n");
+    if (sigaction(SIGINT, &sa, NULL) == -1) {
+        perror("Failed to set up signal handler");
         return 1;
     }
 
-    debug_log("Initializing RTSP server");
-    // Initialize server
-    server = rtsp_server_init(&config);
+    // Prepare RTSP server config
+    rtsp_server_config_t config;
+    memset(&config, 0, sizeof(config));
+    config.port = port;
+    config.cert_path = NULL;
+    config.key_path = NULL;
+    strncpy(config.output_dir, output_dir, sizeof(config.output_dir) - 1);
+    config.output_dir[sizeof(config.output_dir) - 1] = '\0';
+
+    // Initialize and start mDNS advertisement
+    debug_log("Starting mDNS advertisement for AIRSINK on port %d", config.port);
+    if (mdns_avahi_init("AIRSINK", config.port, config.port) != 0) {
+        fprintf(stderr, "Failed to initialize mDNS advertisement\n");
+        return 1;
+    }
+
+    if (mdns_avahi_start("AIRSINK", config.port) != 0) {
+        fprintf(stderr, "Failed to start mDNS advertisement\n");
+        mdns_avahi_cleanup();
+        return 1;
+    }
+
+    // Initialize RTSP server
+    rtsp_server_t *server = rtsp_server_init(&config);
     if (!server) {
         fprintf(stderr, "Failed to initialize RTSP server\n");
         mdns_avahi_stop();
         return 1;
     }
 
-    printf("Starting AirPlay sink on port %d...\n", config.port);
-    printf("Writing audio to directory: %s\n", config.output_dir);
-    if (verbose_mode) {
-        printf("Verbose logging enabled\n");
-    }
-
-    debug_log("Starting RTSP server");
-    // Start server
+    // Start RTSP server
     if (rtsp_server_start(server) != 0) {
         fprintf(stderr, "Failed to start RTSP server\n");
         rtsp_server_cleanup(server);
@@ -98,6 +122,24 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
+    printf("Starting AirPlay sink on port %d...\n", port);
+    printf("Writing audio to directory: %s\n", output_dir);
+    if (verbose) {
+        printf("Verbose logging enabled\n");
+    }
+
+    // Main loop
+    while (running) {
+        sleep(1);
+    }
+
+    // Cleanup
+    debug_log("Stopping RTSP server");
+    rtsp_server_stop(server);
+    rtsp_server_cleanup(server);
+
+    debug_log("Stopping mDNS advertisement");
     mdns_avahi_stop();
+
     return 0;
 } 

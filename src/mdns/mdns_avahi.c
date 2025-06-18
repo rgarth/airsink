@@ -93,4 +93,16 @@ void mdns_avahi_stop(void) {
         avahi_threaded_poll_free(threaded_poll);
         threaded_poll = NULL;
     }
+}
+
+int mdns_avahi_init(const char *service_name, int airplay_port, int raop_port) {
+    // Stub: Assume initialization is handled in mdns_avahi_start for now
+    (void)service_name;
+    (void)airplay_port;
+    (void)raop_port;
+    return 0;
+}
+
+void mdns_avahi_cleanup(void) {
+    mdns_avahi_stop();
 } 
