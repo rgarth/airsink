@@ -1,8 +1,8 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -I./include
-LDFLAGS = -levent -lavahi-client -lavahi-common -lssl -lcrypto
+LDFLAGS = -levent -lavahi-client -lavahi-common -lssl -lcrypto -ljson-c
 
-SRCS = src/main.c src/rtsp_server.c src/mdns_avahi.c
+SRCS = src/main.c src/rtsp/rtsp_server.c src/mdns/mdns_avahi.c src/auth/auth.c
 OBJS = $(SRCS:.c=.o)
 TARGET = airsink
 

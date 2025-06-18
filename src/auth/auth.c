@@ -67,6 +67,7 @@ static void generate_pin(void) {
 }
 
 int auth_handle_pair_setup(const char *request, char **response) {
+    (void)request;
     // Generate new salt and PIN for this pairing attempt
     generate_salt();
     generate_pin();

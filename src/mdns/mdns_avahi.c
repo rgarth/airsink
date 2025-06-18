@@ -12,12 +12,14 @@ static AvahiClient *client = NULL;
 static AvahiEntryGroup *group = NULL;
 
 static void entry_group_callback(AvahiEntryGroup *g, AvahiEntryGroupState state, void *userdata) {
+    (void)g; (void)userdata;
     if (state == AVAHI_ENTRY_GROUP_COLLISION) {
         fprintf(stderr, "mDNS name collision!\n");
     }
 }
 
 static void client_callback(AvahiClient *c, AvahiClientState state, void *userdata) {
+    (void)userdata;
     if (state == AVAHI_CLIENT_FAILURE) {
         fprintf(stderr, "Avahi client failure: %s\n", avahi_strerror(avahi_client_errno(c)));
     }
@@ -25,10 +27,8 @@ static void client_callback(AvahiClient *c, AvahiClientState state, void *userda
 
 int mdns_avahi_start(const char *name, int port) {
     int error;
-    char *service_name = NULL;
     char hostname[256];
     snprintf(hostname, sizeof(hostname), "%s@%s", name, "AIRSINK");
-    service_name = hostname;
 
     threaded_poll = avahi_threaded_poll_new();
     if (!threaded_poll) {
@@ -51,17 +51,41 @@ int mdns_avahi_start(const char *name, int port) {
         return -1;
     }
 
-    // Advertise as _raop._tcp (AirPlay audio)
-    char raop_name[256];
-    snprintf(raop_name, sizeof(raop_name), "112233445566@%s", name); // MAC@Name
+    // Advertise as _airplay._tcp (AirPlay 2)
+    char airplay_name[256];
+    // Use proper AirPlay 2 format: MAC@DeviceName
+    snprintf(airplay_name, sizeof(airplay_name), "485D607CEE22@%s", name);
     int ret = avahi_entry_group_add_service(
         group,
         AVAHI_IF_UNSPEC, AVAHI_PROTO_UNSPEC, 0,
-        raop_name,
-        "_raop._tcp",
+        airplay_name,
+        "_airplay._tcp",
         NULL, NULL,
         port,
-        "txtvers=1", "ch=2", "cn=0,1,2,3", "et=0,3,5", "sv=false", "da=true", "sr=44100", "ss=16", "pw=false", "vn=65537", "tp=UDP", NULL
+        "deviceid=48:5D:60:7C:EE:22", 
+        "features=0x5A7FFFF7,0x1E", 
+        "model=AppleTV2,1", 
+        "srcvers=220.68", 
+        "protovers=1.0", 
+        "pk=1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+        "acl=0",
+        "rsf=0x0",
+        "ft=0x5A7FFFF7,0x1E",
+        "vs=130.14",
+        "tp=TCP,UDP",
+        "md=0,1,2",
+        "pw=false",
+        "sr=44100",
+        "ss=16",
+        "ch=2",
+        "cn=0,1",
+        "et=0,1",
+        "ek=1",
+        "sf=0x4",
+        "da=true",
+        "sv=false",
+        "sm=false",
+        NULL
     );
     if (ret < 0) {
         fprintf(stderr, "Failed to add mDNS service: %s\n", avahi_strerror(ret));
@@ -73,7 +97,7 @@ int mdns_avahi_start(const char *name, int port) {
 
     avahi_entry_group_commit(group);
     avahi_threaded_poll_start(threaded_poll);
-    printf("mDNS: AirPlay service '%s' advertised on port %d\n", raop_name, port);
+    printf("mDNS: AirPlay 2 service '%s' advertised on port %d\n", airplay_name, port);
     return 0;
 }
 

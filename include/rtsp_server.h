@@ -29,6 +29,9 @@ typedef struct {
     int cseq;
     struct bufferevent *bev;
     SSL *ssl;
+    bool authenticated;
+    bool fairplay_setup;
+    char *client_instance;
     // Add more session state as needed
 } rtsp_session_t;
 

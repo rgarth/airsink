@@ -42,6 +42,8 @@ void print_usage(const char *prog_name) {
     printf("  -p port    Specify port number (default: 7000)\n");
     printf("  -d dir     Specify output directory (default: current directory)\n");
     printf("  -h         Show this help message\n");
+    printf("\n");
+    printf("AirPlay 2 Audio Sink - Receives AirPlay 2 audio streams\n");
 }
 
 int main(int argc, char *argv[]) {
@@ -64,7 +66,7 @@ int main(int argc, char *argv[]) {
                 verbose_mode = true;
                 break;
             case 'h':
-                printf("Usage: %s [-p port] [-o output_dir] [-v]\n", argv[0]);
+                print_usage(argv[0]);
                 return 0;
             default:
                 fprintf(stderr, "Usage: %s [-p port] [-o output_dir] [-v]\n", argv[0]);
@@ -94,7 +96,7 @@ int main(int argc, char *argv[]) {
     config.output_dir[sizeof(config.output_dir) - 1] = '\0';
 
     // Initialize and start mDNS advertisement
-    debug_log("Starting mDNS advertisement for AIRSINK on port %d", config.port);
+    debug_log("Starting mDNS advertisement for AirPlay 2 AIRSINK on port %d", config.port);
     if (mdns_avahi_init("AIRSINK", config.port, config.port) != 0) {
         fprintf(stderr, "Failed to initialize mDNS advertisement\n");
         return 1;
@@ -109,20 +111,20 @@ int main(int argc, char *argv[]) {
     // Initialize RTSP server
     rtsp_server_t *server = rtsp_server_init(&config);
     if (!server) {
-        fprintf(stderr, "Failed to initialize RTSP server\n");
-        mdns_avahi_stop();
+        fprintf(stderr, "Failed to initialize AirPlay 2 RTSP server\n");
+        mdns_avahi_cleanup();
         return 1;
     }
 
     // Start RTSP server
     if (rtsp_server_start(server) != 0) {
-        fprintf(stderr, "Failed to start RTSP server\n");
+        fprintf(stderr, "Failed to start AirPlay 2 RTSP server\n");
         rtsp_server_cleanup(server);
-        mdns_avahi_stop();
+        mdns_avahi_cleanup();
         return 1;
     }
 
-    printf("Starting AirPlay sink on port %d...\n", port);
+    printf("Starting AirPlay 2 sink on port %d...\n", port);
     printf("Writing audio to directory: %s\n", output_dir);
     if (verbose) {
         printf("Verbose logging enabled\n");
@@ -134,12 +136,12 @@ int main(int argc, char *argv[]) {
     }
 
     // Cleanup
-    debug_log("Stopping RTSP server");
+    debug_log("Stopping AirPlay 2 RTSP server");
     rtsp_server_stop(server);
     rtsp_server_cleanup(server);
 
     debug_log("Stopping mDNS advertisement");
-    mdns_avahi_stop();
+    mdns_avahi_cleanup();
 
     return 0;
 } 
