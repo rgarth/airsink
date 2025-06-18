@@ -24,7 +24,8 @@ int main(void) {
     rtsp_server_config_t config = {
         .port = 7000,  // Default AirPlay port
         .cert_path = NULL,
-        .key_path = NULL
+        .key_path = NULL,
+        .output_dir = "." // Default to current directory
     };
 
     printf("Starting AirPlay sink test server on port %d...\n", config.port);

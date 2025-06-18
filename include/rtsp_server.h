@@ -12,6 +12,7 @@ typedef struct {
     int port;
     const char *cert_path;
     const char *key_path;
+    char output_dir[256]; // New: output directory for audio files
 } rtsp_server_config_t;
 
 // RTSP session state
